@@ -40,7 +40,7 @@ def create_empty_netCDF(path_to_netCDF = "C:\\Users\\tom_s\\Desktop\\Minor\\SCD\
     try: ncfile.close()  # just to be safe, make sure dataset is not already open.
     except: pass
     ncfile = Dataset(path_to_netCDF+"Nazca_netCDF.nc",mode='w',format='NETCDF4_CLASSIC') 
-    print(ncfile)
+    return ncfile
 
 def open_netCDF(path_to_netCDF = "C:\\Users\\tom_s\\Desktop\\Minor\\SCD\\Data\\Nazca\\netCDF\\"):
     '''
@@ -51,27 +51,28 @@ def open_netCDF(path_to_netCDF = "C:\\Users\\tom_s\\Desktop\\Minor\\SCD\\Data\\N
     ncfile = Dataset(path_to_netCDF+"Nazca_netCDF.nc",mode='a',format='NETCDF4_CLASSIC') 
     return ncfile
 
-def create_dimensions(ncfile, lst_atribute_names):
+def create_dimensions(ncfile, lst_atribute_names, Nazca_dbf_data):
     '''
-    Creating the limitation of the variables.
+    Creating the limitation of the variables. Dimension = amount of values in the database = length of dbf datafile
     dimension_length = 0 or None means it is not prefixed and can grow to infinity
-    'A dimension is the minimum number of coordinates necessary to accurately describe a point in any given type of space'
+
     input:
         lst_atribute_names: list of all relevant atribute names in Nazca dbf datafile (list of strings)
         ncfile: netCDF file opened by 'open_netCDF', in append mode
+        Nazca_dbf_data: dbf file of Nazca data, used to know how big the dimensions must be
     output:
         ncfile: ncfile with added dimensions and their atribute names
     '''
     for i in lst_atribute_names:
-        dimension = ncfile.createDimension(i, 100) 
+        # create dimension with length of dbf datafile
+        dimension = ncfile.createDimension(i, len(Nazca_dbf_data)) 
     for dim in ncfile.dimensions.items():
         print(dim)
     return ncfile
 
 def create_variables(ncfile, Nazca_dbf_data):
     '''
-    Creating the variables
-    'A variable is just a placeholder for a quantity that's unknown or changing'
+    Creating the variable objects
     '''
     ncfile_variables = []
     # we loop through a random record in Nazca data, which is a dictionary. For each key (atribute name) we assign a Variable with datatype = datatype(value (datapoint))
@@ -89,26 +90,39 @@ def writing_data_to_netCDF(ncfile, ncfile_variables, Nazca_data_dbf):
         # now we can write all Nazca data from one specific field to 'var'. Nazca data is formatted in records, so we have to get a specific field value for each record.
         # we can do this by looping through Nazca data. Than we declare the desirable key, which is the field name corresponding to 'var' (so for index=0 it is the first field 'ID'). 
         # we can use this key to get the right value for one row. 
-        var = np.array([Nazca_data_dbf[i][list(Nazca_data_dbf[0].keys())[index]] for i in range(len(Nazca_data_dbf))])
+        print(var)
+        print("new var--",[Nazca_data_dbf[i][list(Nazca_data_dbf[0].keys())[index]] for i in range(len(Nazca_data_dbf))])
+        var[:] = np.array([Nazca_data_dbf[i][list(Nazca_data_dbf[0].keys())[index]] for i in range(len(Nazca_data_dbf))])
+
     return ncfile
 
-def print_ncfile_variables(ncfile, field, limit=10):
-    ds[field][:limit]
+def build_ncfile(atribute_names, pathname_Nazca_dbf, pathname_Nazca_netCDF):
+    '''
+    combines functions 'create_dimensions', 'create_variables', 'writing_data_to_netCDF' into one function. This function builds the structure of the netCDF file and writes the data from 
+    the dbf file to the netCDF file. 
+    '''
+    dbffile = load_Nazca(atribute_names, path_to_data=pathname_Nazca_dbf)
+    ncfile = create_empty_netCDF(path_to_netCDF=pathname_Nazca_netCDF)
+    ncfile = create_dimensions(ncfile, atribute_names, dbffile)
+    ncfile, ncfile_variables = create_variables(ncfile, dbffile)
+    ncfile = writing_data_to_netCDF(ncfile,ncfile_variables,dbffile)
+    return ncfile
+
+def get_ncfile_variables(ncfile, field, limit=10):
+    return ncfile[field][:limit]
 
 def create_metadata(ncfile):
     ncfile.title='My model data'
     return ncfile
 
-# ncfile = open_netCDF()
-# ncfile_dim = create_dimensions(ncfile,["ID","xcoord","ycoord"])
-# print(ncfile_dim)
+pathname_Nazca_dbf = "C:\\Users\\tom_s\\Desktop\\Minor\\SCD\\Data\\Nazca\\"
+pathname_Nazca_netCDF = "C:\\Users\\tom_s\\Desktop\\Minor\\SCD\\Data\\Nazca\\netCDF\\"
 atribute_names = ["ID","XCOORD","YCOORD"]
-dbffile = load_Nazca(atribute_names)
-print(dbffile[:10])
-create_empty_netCDF()
-ncfile = open_netCDF()
-ncfile = create_dimensions(ncfile, atribute_names)
-ncfile, ncfile_variables = create_variables(ncfile, dbffile)
-ncfile = writing_data_to_netCDF(ncfile,ncfile_variables,dbffile)
-print_ncfile_variables(ncfile, "ID")
-print(ncfile)
+
+ncfile = build_ncfile(atribute_names, pathname_Nazca_dbf, pathname_Nazca_netCDF)
+# ncfile = open_netCDF(path_to_netCDF=pathname_Nazca_netCDF)
+variables = get_ncfile_variables(ncfile, "ID")
+print(variables)
+
+ncfile.close()
+print('Dataset is closed!')
